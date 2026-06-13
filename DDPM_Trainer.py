@@ -11,7 +11,7 @@ from os import listdir
 from os.path import isfile, join
 
 
-from DenoisingDiffusionModel import DiffusionModel
+from DenoisingDiffusionModel import DiffusionModel ,EMA
 
 
 ## this is a cuda implementation
@@ -22,7 +22,7 @@ device = torch.device("cuda")
 
 ## copy pasted from Pytorch 
 torch.backends.fp32_precision = "tf32"
-torch.backends.cudnn.conv.fp32_precision = "tf32"
+#torch.backends.cudnn.conv.fp32_precision = "tf32"
 
 # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
 # in PyTorch 1.12 and later.
@@ -69,39 +69,47 @@ class CIFAR_DataLoader(torch.utils.data.Dataset):
     def __getitem__(self,index):
         return self.Data[index] , self.Labels[index]
 
-batch_size = 64
+batch_size = 128
 T_N = 1024
-T_DIM = 128
+T_DIM = 64
 HEADS = 8
-MODEL_DIM = 256
-LAYERS = 3
+MODEL_DIM = 128
+LAYERS = 1
 
-Model = DiffusionModel(3,T_N,T_DIM,HEADS,MODEL_DIM,LAYERS,device)
+Model = DiffusionModel(3,T_N,T_DIM,HEADS,MODEL_DIM,LAYERS,device).to(device)
 
 Data = CIFAR_DataLoader("cifar-10-batches-py",device)
 train_dataloader = DataLoader(Data, batch_size=batch_size, shuffle=True)
 
 criterion = nn.MSELoss()
 
-optim = torch.optim.Adam(Model.parameters(), lr=2e-4, betas=(0.5, 0.999))
+optim = torch.optim.Adam(Model.parameters(), lr=2e-4, betas=(0.9, 0.999))
 
+scaler = torch.amp.GradScaler()
+
+decay = 0.9999
+EMAModel = EMA(Model,decay)
 
 epochs = 1000
 losses = []
 
 for ep in range(epochs):
-
+    
     for i, data in enumerate(train_dataloader):
-
+        
         optim.zero_grad()
         X = data[0].to(device)
+        with torch.autocast(device_type='cuda', dtype=torch.float16):
+            eps , eps_t = Model(X)
+            loss = criterion(eps_t,eps)
+        scaler.scale(loss).backward()
 
-        eps , eps_t = Model(X)
-        loss = criterion(eps_t,eps)
-        loss.backward()
+        scaler.step(optim)
+        scaler.update()
 
-        optim.step()
-        if (i % 500) == 0:
+        EMAModel.update(Model)
+
+        if (i % 50) == 0:
             losses.append(loss.item())
             info = f"Epoch {ep} : Step {i} \n: Model Loss: {loss.item()} \n"
             with open("logDiffusion.txt","a") as f:
@@ -109,12 +117,13 @@ for ep in range(epochs):
             print("==========================")
             print(info)
             print("==========================")
-        if ((ep % 50) == 0) and (ep != 0):
+    if ((ep % 50) == 0) and (ep != 0):
             ts = time.time()
             stmp = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
             torch.save({
                 "Epoch":ep,
                 "DiffusionModel" : Model.state_dict(),
+                "EMA_Weights" : EMAModel.S_model.state_dict(),
                 "time"    : stmp,
                 "Batch_Size" : batch_size,
                 'Optim': optim.state_dict(),
@@ -127,6 +136,7 @@ stmp = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
 torch.save({
                 "Epoch":ep,
                 "DiffusionModel" : Model.state_dict(),
+                "EMA_Weights" : EMAModel.S_model.state_dict(),
                 "time"    : stmp,
                 "Batch_Size" : batch_size,
                 'Optim': optim.state_dict(),

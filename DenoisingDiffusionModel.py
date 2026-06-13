@@ -1,6 +1,29 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import copy
+
+
+class EMA:
+
+    def __init__(self,model : nn.Module, decay):
+        
+
+        self.decay = decay
+        self.t = 0
+        self.S_model = copy.deepcopy(model).eval()
+        for i in self.S_model.parameters():
+            i.requires_grad = False
+
+    @torch.no_grad()
+    def update(self,model):
+        l = self.decay_at()
+        for St, X in zip(self.S_model.parameters(), model.parameters()):
+            St.mul_(l).add_(X, alpha = 1-l)
+        self.t+=1
+    def decay_at(self):
+        return min(self.decay, (1 + self.t) / (10 + self.t))
+    
 
 
 
@@ -144,7 +167,7 @@ class UNet(nn.Module):
         self.D4 = nn.MaxPool2d(2,2)
 
         self.M5 = Ublock(512,1024,time_dim,nn.ReLU)
-        self.T5 = TransformerBlock(1024,heads,dim,  T)
+        #self.T5 = TransformerBlock(1024,heads,dim,  T)
 
 
         self.U1 = nn.ConvTranspose2d(1024,512,2,2)
@@ -175,7 +198,8 @@ class UNet(nn.Module):
         R3 = self.T3(self.M3(self.D2(R2),t) )
         R4 = self.T4(self.M4(self.D3(R3),t) )
 
-        B1 = self.T5(self.M5(self.D4(R4),t) )
+        #B1 = self.T5(self.M5(self.D4(R4),t) )
+        B1 = self.M5(self.D4(R4),t) 
         
         C1 = torch.cat((self.U1(B1),R4),1)
 
@@ -192,8 +216,8 @@ class UNet(nn.Module):
     
 # Diffusion Model
  
-def alpha_bar_schedule(T, s=0.008): ## needs refractor
-    t = torch.arange(T + 1, dtype=torch.float32)
+def alpha_bar_schedule(T, s=0.008): 
+    t = torch.arange(T+1, dtype=torch.float32)
     f = torch.cos(((t / T + s) / (1 + s)) * (np.pi / 2)) ** 2
     return f / f[0]          # alpha_bar, length T+1
 
@@ -215,14 +239,41 @@ class DiffusionModel(nn.Module):
         self.register_buffer("alpha_bars", alpha_bar_schedule(time))
     
     def forward(self,X):
-        t = torch.randint(0, self.time, (X.shape[0],), device=self.device)
+        t = torch.randint(1, self.time+1, (X.shape[0],), device=self.device)
         eps = torch.randn_like(X)
-        ab = self.alpha_bars[t].reshape(-1,1,1,1)
+        ab = self.alpha_bars[t-1].reshape(-1,1,1,1)
         Z_t = (eps *((1-ab)**0.5)) + (X*(ab**0.5))
 
         eps_theta = self.UNET(Z_t,t)
 
         return eps ,  eps_theta 
+    
+    @torch.no_grad()
+    def sample(self, n, channels=3, size=32):
+        self.eval()
+        x = torch.randn(n, channels, size, size, device=self.device)
+        
+        ab = self.alpha_bars
+        for t in reversed(range(1, self.time + 1)):          # T … 1
+            t_batch = torch.full((n,), t, device=self.device, dtype=torch.long)
+            eps_theta = self.UNET(x, t_batch)
+
+            ab_t    = ab[t - 1]
+            ab_prev = ab[t - 2] if t > 1 else torch.ones_like(ab_t)
+            alpha_t = ab_t / ab_prev
+            beta_t  = 1 - alpha_t
+            
+            if t > 1:
+                x = ((1 / alpha_t.sqrt()) * (x - (beta_t / ((1 - ab_t).clamp(1e-8) ** 0.5) * eps_theta))) + (beta_t.sqrt() * torch.randn_like(x))
+                
+            else:
+                x = ((1 / alpha_t.sqrt()) * (x - (beta_t / ((1 - ab_t).clamp(1e-8) ** 0.5) * eps_theta)))
+            
+
+        self.train()
+        #x = x.clamp(-1, 1)
+        return x
+    
 
 
 
