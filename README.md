@@ -8,9 +8,9 @@ Trained on CIFAR-10 (32×32) and CelebA (128×128).
 
 
 <p align="center">
-  <img src="assets/samples_celeba.png" width="640" alt="Samples from the CelebA model">
+  <img src="assets/CELEBA_SAMPLE_1000EP_DDPM.png" width="640" alt="Samples from the CelebA model">
   <br>
-  <sub>Unconditional samples, CelebA 128×128, EMA weights</sub>
+  <sub>Unconditional samples, CelebA 128×128, EMA weights, Using DDPM sampler</sub>
 </p>
 
 ---
@@ -98,6 +98,7 @@ Two configurations, one per dataset.
 ## Notes
 - DDIM sampler is referred to as sample_() and DDPM sampler is referred to as sample().
 - Diffusion Model was optimised for RTX A2000 GPU to increase CUDA throughput(~4s to ~2.5s) and Memory Usage.
+- **Trained Weights Not Included as File Sizes are large for Github.CelebA 128x128 weights and checkpoints can be requested**
 
 ## References
 
