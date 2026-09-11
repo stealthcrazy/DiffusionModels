@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import copy
 
+#CELEB A 128X128 model trained on and optimised for A2000 GPU
 
 class EMA:
 
@@ -20,8 +21,7 @@ class EMA:
         l = self.decay_at()
         #for St, X in zip(self.S_model.parameters(), model.parameters()):
             #St.mul_(l).add_(X, alpha = 1-l)
-        m_params = list(model.parameters())
-        torch._foreach_lerp_(list(self.S_model.parameters()), m_params, 1 - l)  # St += (1-l)*(X - St)
+        torch._foreach_lerp_(list(self.S_model.parameters()), list(model.parameters()), 1 - l)  # St += (1-l)*(X - St)
         self.t+=1
     def decay_at(self):
         return min(self.decay, (1 + self.t) / (10 + self.t))
@@ -156,12 +156,12 @@ class UNet(nn.Module):
         self.D1 = nn.MaxPool2d(2,2)
         
         self.M2 = Ublock(64,128,time_dim,nn.ReLU)
-        self.T2 = TransformerBlock(128,heads,dim,  T)
+        #self.T2 = TransformerBlock(128,heads,dim,  T)
         self.D2 = nn.MaxPool2d(2,2)
 
 
         self.M3 = Ublock(128,256,time_dim,nn.ReLU)
-        self.T3 = TransformerBlock(256,heads,dim,  T)
+        #self.T3 = TransformerBlock(256,heads,dim,  T)
         self.D3 = nn.MaxPool2d(2,2)
 
         self.M4 = Ublock(256,512,time_dim,nn.ReLU)
@@ -169,7 +169,7 @@ class UNet(nn.Module):
         self.D4 = nn.MaxPool2d(2,2)
 
         self.M5 = Ublock(512,1024,time_dim,nn.ReLU)
-        #self.T5 = TransformerBlock(1024,heads,dim,  T)
+        self.T5 = TransformerBlock(1024,heads,dim,  T)
 
 
         self.U1 = nn.ConvTranspose2d(1024,512,2,2)
@@ -181,12 +181,12 @@ class UNet(nn.Module):
         #concat connection 
 
         self.N2 = Ublock(512,256,time_dim,nn.ReLU)
-        self.T7 = TransformerBlock(256,heads,dim,  T)
+        #self.T7 = TransformerBlock(256,heads,dim,  T)
         self.U3 = nn.ConvTranspose2d(256,128,2,2)
         #concat connection 
 
         self.N3 = Ublock(256,128,time_dim,nn.ReLU)
-        self.T8 = TransformerBlock(128,heads,dim,  T)
+        #self.T8 = TransformerBlock(128,heads,dim,  T)
         self.U4 = nn.ConvTranspose2d(128,64,2,2)
         #concat connection 
 
@@ -196,20 +196,24 @@ class UNet(nn.Module):
     def forward(self,X,t):
         t = self.TimeEmbd(t)
         R1 = self.M1(X,t)
-        R2 = self.T2(self.M2(self.D1(R1),t) )
-        R3 = self.T3(self.M3(self.D2(R2),t) )
+        #R2 = self.T2(self.M2(self.D1(R1),t) )
+        R2 = self.M2(self.D1(R1),t)
+        #R3 = self.T3(self.M3(self.D2(R2),t) )
+        R3 = self.M3(self.D2(R2),t)
         R4 = self.T4(self.M4(self.D3(R3),t) )
 
-        #B1 = self.T5(self.M5(self.D4(R4),t) )
-        B1 = self.M5(self.D4(R4),t) 
+        B1 = self.T5(self.M5(self.D4(R4),t) )
+        #B1 = self.M5(self.D4(R4),t) 
         
         C1 = torch.cat((self.U1(B1),R4),1)
 
         B2 = self.T6(self.N1(C1,t) )
         C2 = torch.cat((self.U2(B2),R3),1)
-        B3 = self.T7(self.N2(C2,t) )
+        #B3 = self.T7(self.N2(C2,t) )
+        B3 = self.N2(C2,t) 
         C3 = torch.cat((self.U3(B3),R2),1)
-        B4 = self.T8(self.N3(C3,t) )
+        #B4 = self.T8(self.N3(C3,t) )
+        B4 = self.N3(C3,t) 
         C4 = torch.cat((self.U4(B4),R1),1)
         O = self.O(self.N4(C4,t))
         return O
@@ -247,8 +251,8 @@ class DiffusionModel(nn.Module):
     
     def forward(self,X):
         t = torch.randint(1, self.time+1, (X.shape[0],), device=self.device)
-        eps = torch.randn_like(X)
-        ab = self.alpha_bars[t-1].reshape(-1,1,1,1)
+        eps = torch.randn_like(X,device = self.device)
+        ab = self.alpha_bars[t].reshape(-1,1,1,1)
         Z_t = (eps *((1-ab)**0.5)) + (X*(ab**0.5))
 
         eps_theta = self.UNET(Z_t,t)
@@ -256,33 +260,70 @@ class DiffusionModel(nn.Module):
         return eps ,  eps_theta 
     
     @torch.no_grad()
-    def sample(self, n, channels=3, size=32):
+    def sample(self, n, channels=3, size=128):
         self.eval()
         x = torch.randn(n, channels, size, size, device=self.device)
         
         ab = self.alpha_bars
-        for t in reversed(range(1, self.time + 1)):          # T … 1
+        for t in reversed(range(1, self.time-4)):         
             t_batch = torch.full((n,), t, device=self.device, dtype=torch.long)
             eps_theta = self.UNET(x, t_batch)
 
-            ab_t    = ab[t - 1]
-            ab_prev = ab[t - 2] if t > 1 else torch.ones_like(ab_t)
+            ab_t    = ab[t]
+            ab_prev = ab[t -1] if t > 1 else torch.ones_like(ab_t)
             alpha_t = ab_t / ab_prev
             beta_t  = 1 - alpha_t
+            #print(t,len(ab),ab_t,ab_prev,alpha_t,beta_t)
             
             if t > 1:
-                x = ((1 / alpha_t.sqrt()) * (x - (beta_t / ((1 - ab_t).clamp(1e-8) ** 0.5) * eps_theta))) + (beta_t.sqrt() * torch.randn_like(x))
+                x = ((1 / alpha_t.sqrt()) * (x - ((beta_t / ((1 - ab_t).clamp(1e-8) ** 0.5)) * eps_theta))) + (beta_t.sqrt() * torch.randn_like(x))
                 
             else:
-                x = ((1 / alpha_t.sqrt()) * (x - (beta_t / ((1 - ab_t).clamp(1e-8) ** 0.5) * eps_theta)))
+                x = ((1 / alpha_t.sqrt()) * (x - ((beta_t / ((1 - ab_t).clamp(1e-8) ** 0.5)) * eps_theta)))
             
 
-        self.train()
-        #x = x.clamp(-1, 1)
+        #self.train()
+        x = x.clamp(-1, 1)
         return x
-    
 
-
-
+    @torch.no_grad()
+    def sample_(self, n, channels=3, size=128, steps=None, eta=0.0,
+                t_start=None, clip_x0=True):
         
+        
+        self.eval()
 
+        ab = self.alpha_bars.detach()
+        t_start = (self.time - 5) if t_start is None else int(min(t_start, self.time))
+        steps = t_start if steps is None else int(min(steps, t_start))
+
+        ts = torch.linspace(t_start, 1, steps).round().long().tolist()
+        ts = sorted(set(ts), reverse=True)
+
+        x = torch.randn(n, channels, size, size, device=self.device)
+
+        for i, t in enumerate(ts):
+            t_prev = ts[i + 1] if i + 1 < len(ts) else 0    # 0 -> ab_prev = 1 -> x = x0
+
+            ab_t = ab[t].clamp(min=1e-8)
+            ab_prev = ab[t_prev].clamp(min=1e-8)
+            sm_t = (1 - ab_t).clamp(min=1e-8)
+
+            t_batch = torch.full((n,), t, device=self.device, dtype=torch.long)
+            eps = self.UNET(x, t_batch)
+
+            x0 = (x - sm_t.sqrt() * eps) / ab_t.sqrt()
+            if clip_x0:
+                x0 = x0.clamp(-1, 1)
+                eps = (x - ab_t.sqrt() * x0) / sm_t.sqrt()   # keep eps consistent with x0
+
+            sigma = eta * ((1 - ab_prev) / sm_t).clamp(min=0).sqrt() \
+                        * (1 - ab_t / ab_prev).clamp(min=0).sqrt()
+            c = (1 - ab_prev - sigma ** 2).clamp(min=0).sqrt()
+
+            x = ab_prev.sqrt() * x0 + c * eps
+            if eta > 0 and t_prev > 0:
+                x = x + sigma * torch.randn_like(x)
+
+    
+        return x.clamp(-1, 1)

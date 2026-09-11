@@ -12,10 +12,11 @@ from os import listdir
 from os.path import isfile, join
 from torch.profiler import profile, ProfilerActivity, record_function
 
-from DiffusionModelv2 import DiffusionModel ,EMA
+from Model.DiffusionModel import DiffusionModel ,EMA
 
 
 ## this is a cuda implementation
+## Trainer for CELEB A 128X128
 
 device = torch.device("cuda")
 
