@@ -11,6 +11,7 @@ Trained on CIFAR-10 (32×32) and CelebA (128×128).
   <img src="assets/CELEBA_SAMPLE_1000EP_DDPM.png" width="640" alt="Samples from the CelebA model">
   <br>
   <sub>Unconditional samples, CelebA 128×128, EMA weights, Using DDPM sampler</sub>
+  <sub>FID : 15.9 </sub>
 </p>
 
 
@@ -54,6 +55,7 @@ latent and conditional diffusion.
 
 | Dataset | Resolution | Steps | Sampler |FID ↓ | Samples used | 
 |---|---|---|---|---|---|
+| CelebA | 128×128 | 512 | DDPM |**[15.9]** | [10,0000] |
 | CelebA | 128×128 | 512 | DDIM@ 100 Steps |**[17.8]** | [10,0000] |
 | CelebA | 128×128 | 512 | DDIM@ 50 Steps |**[18.6]** | [10,0000] |
 
