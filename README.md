@@ -13,6 +13,15 @@ Trained on CIFAR-10 (32×32) and CelebA (128×128).
   <sub>Unconditional samples, CelebA 128×128, EMA weights, Using DDPM sampler</sub>
 </p>
 
+
+### Training loss
+
+<p align="center">
+  <img src="assets/CelebADiffusion1000Epoch.png" width="560" alt="Training loss">
+  <br>
+  <sub>MSE on predicted noise for DDPM trained on CELEB A 128x128</sub>
+</p>
+
 ---
 
 ## What's implemented
@@ -51,26 +60,7 @@ latent and conditional diffusion.
 FID was Computed using Clean-fid Library in FID.py
 
 
-### Generated samples
 
-<p align="center">
-  <img src="assets/CIFAR10_sample.png" width="480" alt="CIFAR-10 samples">
-  <br>
-  <sub>CIFAR-10, 32×32</sub>
-</p>
-<p align="center">
-  <img src="assets/celebA_10000_DDIM.png" width="480" alt="CelebA samples">
-  <br>
-  <sub>CelebA, 128x128 DDIM 100 Steps</sub>
-</p>
-
-### Training loss
-
-<p align="center">
-  <img src="assets/CelebADiffusion1000Epoch.png" width="560" alt="Training loss">
-  <br>
-  <sub>MSE on predicted noise for DDPM trained on CELEB A 128x128</sub>
-</p>
 
 ---
 
@@ -100,6 +90,18 @@ Two configurations, one per dataset.
 - Diffusion Model was optimised for RTX A2000 GPU to increase CUDA throughput(~4s to ~2.5s) and Memory Usage.
 - **Trained Weights Not Included as File Sizes are large for Github.CelebA 128x128 weights and checkpoints can be requested**
 
+### Generated samples
+
+<p align="center">
+  <img src="assets/CIFAR10_sample.png" width="480" alt="CIFAR-10 samples">
+  <br>
+  <sub>CIFAR-10, 32×32</sub>
+</p>
+<p align="center">
+  <img src="assets/celebA_10000_DDIM.png" width="480" alt="CelebA samples">
+  <br>
+  <sub>CelebA, 128x128 DDIM 100 Steps</sub>
+</p>
 ## References
 
 - Ho et al. (2020), *Denoising Diffusion Probabilistic Models* — [arXiv:2006.11239](https://arxiv.org/abs/2006.11239)
